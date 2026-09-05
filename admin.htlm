@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Draft Day Dash — Admin</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{--chalk:#f3f1e7;--ink:#0a1620;--gold:#e3b23c;--red:#d1483f;--green:#4ade80;}
+  *{box-sizing:border-box;}
+  body{margin:0;min-height:100vh;background:#0c1524;color:var(--chalk);font-family:system-ui,-apple-system,sans-serif;
+    display:flex;flex-direction:column;align-items:center;padding:32px 18px;}
+  h1{font-size:20px;margin:0 0 4px;}
+  .sub{font-size:13px;color:rgba(243,241,231,0.6);margin:0 0 24px;text-align:center;}
+  .card{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.14);border-radius:14px;padding:20px;width:100%;max-width:380px;}
+  label{font-size:12px;font-weight:700;color:var(--gold);display:block;margin-bottom:6px;}
+  input{width:100%;padding:12px;border-radius:8px;border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.05);color:var(--chalk);font-size:15px;margin-bottom:16px;}
+  button{width:100%;padding:14px;border:none;border-radius:10px;font-size:15px;font-weight:800;cursor:pointer;margin-bottom:10px;}
+  .reset-btn{background:var(--red);color:#fff;}
+  .reset-btn:disabled{opacity:0.5;}
+  .refresh-btn{background:transparent;border:1px solid rgba(255,255,255,0.25);color:var(--chalk);}
+  .msg{font-size:13px;text-align:center;min-height:18px;margin-top:8px;font-weight:600;}
+  .msg.ok{color:var(--green);}
+  .msg.err{color:var(--red);}
+  .board{margin-top:24px;width:100%;max-width:380px;}
+  .board h2{font-size:13px;color:rgba(243,241,231,0.6);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px;}
+  .row{display:flex;justify-content:space-between;padding:8px 12px;border-radius:8px;background:rgba(255,255,255,0.04);margin-bottom:6px;font-size:14px;}
+  .row .open{color:rgba(243,241,231,0.4);font-style:italic;}
+  .row .taken{color:var(--gold);font-weight:700;}
+</style>
+</head>
+<body>
+  <h1>🏈 Draft Day Dash — Admin</h1>
+  <p class="sub">Not linked from the game. Bookmark this page.</p>
+
+  <div class="card">
+    <label>ADMIN PASSWORD</label>
+    <input type="password" id="pw" placeholder="Enter reset key" autocomplete="off">
+    <button class="reset-btn" id="resetBtn">Reset entire board</button>
+    <button class="refresh-btn" id="refreshBtn">Refresh status below</button>
+    <div class="msg" id="msg"></div>
+  </div>
+
+  <div class="board">
+    <h2>Current board</h2>
+    <div id="rows"></div>
+  </div>
+
+<script>
+  // Same values as index.html
+  const SUPABASE_URL  = 'https://iiincqwdyekxndjzjmgm.supabase.co';
+  const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlpaW5jcXdkeWVreG5kanpqbWdtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg2MjI3OTIsImV4cCI6MjEwNDE5ODc5Mn0.JMOMYZl3Hn_LqOZXJmFNfT6ltQte9f0cXF7CzINfXg8';
+
+  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+  const msg = document.getElementById('msg');
+  const rows = document.getElementById('rows');
+
+  function setMsg(text, ok){ msg.textContent = text; msg.className = 'msg ' + (ok ? 'ok' : 'err'); }
+
+  async function loadBoard(){
+    const { data, error } = await sb.from('draft_holes').select('*').order('hole');
+    rows.innerHTML = '';
+    if(error){ rows.innerHTML = '<div class="row"><span>Could not load — check Supabase URL/key above.</span></div>'; return; }
+    (data || []).forEach(h => {
+      const d = document.createElement('div'); d.className = 'row';
+      d.innerHTML = h.claimed_by
+        ? `<span>Hole ${h.hole}</span><span class="taken">${h.claimed_by} — pick #${h.pick}</span>`
+        : `<span>Hole ${h.hole}</span><span class="open">open</span>`;
+      rows.appendChild(d);
+    });
+  }
+
+  document.getElementById('refreshBtn').addEventListener('click', loadBoard);
+
+  document.getElementById('resetBtn').addEventListener('click', async () => {
+    const pw = document.getElementById('pw').value.trim();
+    if(!pw){ setMsg('Enter the reset key first.', false); return; }
+    setMsg('Resetting…', true);
+    const { data, error } = await sb.rpc('reset_draft', { p_key: pw });
+    if(error){ setMsg('Error: ' + error.message, false); console.error(error); return; }
+    if(data === true){ setMsg('✓ Board reset. All 10 holes are open again.', true); loadBoard(); }
+    else{ setMsg('Wrong reset key — nothing was changed.', false); }
+  });
+
+  loadBoard();
+</script>
+</body>
+</html>
