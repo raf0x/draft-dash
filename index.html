@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0c1524">
+<title>Draft Day Dash: QB Challenge</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --turf-dark:#123821; --turf-light:#1c4d2c; --chalk:#f3f1e7; --ink:#0a1620;
+    --gold:#e3b23c; --red:#d1483f; --sky-top:#0c1524; --sky-bottom:#182a3d;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;height:100%;overflow:hidden;overscroll-behavior:none;}
+  body{
+    background:linear-gradient(180deg,var(--sky-top),var(--sky-bottom));
+    font-family:'Inter',system-ui,sans-serif;color:var(--chalk);
+    display:flex;flex-direction:column;align-items:center;
+    padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  .screen{display:none;width:100%;max-width:480px;height:100%;flex-direction:column;}
+  .screen.active{display:flex;}
+
+  /* ---- JOIN ---- */
+  #join{padding:28px 18px;justify-content:center;text-align:center;overflow-y:auto;}
+  .eyebrow{font-size:12px;letter-spacing:0.14em;color:var(--gold);font-weight:700;margin-bottom:6px;}
+  h1{font-family:'Anton',sans-serif;font-size:clamp(34px,10vw,52px);line-height:0.95;margin:0 0 10px;text-shadow:0 4px 0 rgba(0,0,0,0.3);}
+  .sub{font-size:14px;color:rgba(243,241,231,0.72);line-height:1.5;margin:0 auto 22px;max-width:340px;}
+  .names{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .name-btn{
+    padding:16px 10px;border-radius:12px;border:1px solid rgba(243,241,231,0.18);
+    background:rgba(255,255,255,0.05);color:var(--chalk);font-size:16px;font-weight:700;
+    font-family:'Inter',sans-serif;cursor:pointer;position:relative;
+  }
+  .name-btn:active{background:rgba(255,255,255,0.14);}
+  .name-btn.done{opacity:0.45;}
+  .name-btn.done::after{content:'✓ pick ' attr(data-pick);position:absolute;bottom:4px;left:0;right:0;font-size:10px;color:var(--gold);font-weight:700;}
+  .name-btn .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:8px;vertical-align:middle;}
+  .status{margin-top:16px;font-size:12px;color:rgba(243,241,231,0.5);min-height:16px;}
+
+  /* ---- GAME ---- */
+  #game{position:relative;}
+  .hud{
+    display:flex;justify-content:space-between;align-items:center;
+    padding:10px 14px 6px;font-size:13px;font-weight:700;
+  }
+  .hud .me{display:flex;align-items:center;gap:8px;}
+  .hud .me .dot{width:12px;height:12px;border-radius:50%;}
+  .hud .left{color:var(--gold);}
+  canvas{display:block;width:100%;flex:1;touch-action:none;}
+  .hint{text-align:center;font-size:12px;color:rgba(243,241,231,0.55);padding:6px 14px 8px;}
+  .online{
+    display:flex;gap:6px;flex-wrap:wrap;justify-content:center;padding:0 14px 10px;
+  }
+  .online span{font-size:10px;padding:3px 8px;border-radius:20px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);}
+  .online span::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:#4ade80;margin-right:5px;vertical-align:middle;}
+
+  .toast{
+    position:absolute;top:52px;left:50%;transform:translateX(-50%) translateY(-10px);
+    background:var(--ink);border:1px solid var(--gold);color:var(--gold);
+    padding:8px 14px;border-radius:20px;font-size:12px;font-weight:700;white-space:nowrap;
+    opacity:0;transition:opacity 0.25s,transform 0.25s;pointer-events:none;z-index:5;max-width:92%;overflow:hidden;text-overflow:ellipsis;
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+  .overlay{
+    position:absolute;inset:0;background:rgba(10,22,32,0.92);display:none;
+    flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;z-index:10;
+  }
+  .overlay.show{display:flex;animation:pop 0.35s ease;}
+  @keyframes pop{from{opacity:0;transform:scale(0.96);}to{opacity:1;transform:scale(1);}}
+  .overlay h2{font-family:'Anton',sans-serif;font-size:30px;margin:0 0 6px;color:var(--gold);}
+  .overlay .big{font-family:'Anton',sans-serif;font-size:96px;line-height:1;color:var(--chalk);margin:6px 0;}
+  .overlay p{font-size:14px;color:rgba(243,241,231,0.7);margin:0 0 18px;max-width:300px;line-height:1.5;}
+  .board{list-style:none;padding:0;margin:0 0 16px;width:100%;max-width:340px;max-height:46vh;overflow-y:auto;}
+  .board li{display:flex;align-items:center;gap:12px;padding:9px 12px;border-radius:8px;background:rgba(255,255,255,0.05);margin-bottom:6px;}
+  .board .n{font-family:'Anton',sans-serif;font-size:20px;color:var(--gold);width:30px;text-align:center;}
+  .board .dot{width:12px;height:12px;border-radius:50%;}
+  .board .who{flex:1;text-align:left;font-weight:600;font-size:14px;}
+  .board .pending{color:rgba(243,241,231,0.4);font-weight:400;font-style:italic;}
+  .btn{padding:13px 22px;border-radius:10px;border:none;font-size:14px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif;}
+  .btn.gold{background:var(--gold);color:#1a1300;}
+  .btn.ghost{background:transparent;border:1px solid rgba(243,241,231,0.25);color:var(--chalk);margin-top:10px;}
+  .copied{font-size:12px;color:var(--gold);margin-top:8px;height:14px;}
+
+  .confetti{position:fixed;top:-20px;width:9px;height:14px;z-index:50;pointer-events:none;animation:fall linear forwards;}
+  @keyframes fall{to{transform:translateY(110vh) rotate(540deg);opacity:0.3;}}
+
+  #admin{position:fixed;bottom:6px;right:8px;font-size:10px;opacity:0.35;background:none;border:none;color:var(--chalk);display:none;}
+</style>
+</head>
+<body>
+
+<!-- ================= JOIN ================= -->
+<div class="screen active" id="join">
+  <div class="eyebrow">FANTASY FOOTBALL · DRAFT ORDER</div>
+  <h1>DRAFT DAY DASH<br>QB CHALLENGE</h1>
+  <p class="sub">Flick the football through any open hole. The number it lands on is your pick. Hit it, you're locked in. Miss, throw again.</p>
+  <div class="names" id="names"></div>
+  <div class="status" id="joinStatus">Connecting to the field…</div>
+</div>
+
+<!-- ================= GAME ================= -->
+<div class="screen" id="game">
+  <div class="hud">
+    <div class="me"><div class="dot" id="meDot"></div><span id="meName">—</span></div>
+    <div class="left" id="holesLeft">10 holes open</div>
+  </div>
+  <div class="toast" id="toast"></div>
+  <canvas id="c"></canvas>
+  <div class="hint" id="hint">Pull the football back and release to throw</div>
+  <div class="online" id="online"></div>
+
+  <div class="overlay" id="winOverlay">
+    <h2>NAILED IT</h2>
+    <div class="big" id="winPick">#?</div>
+    <p id="winSub">That's your draft pick. Sit back and watch the rest fight for scraps.</p>
+    <button class="btn gold" id="winBoardBtn">See the board</button>
+  </div>
+
+  <div class="overlay" id="boardOverlay">
+    <h2 id="boardTitle">THE DRAFT BOARD</h2>
+    <p id="boardSub"></p>
+    <ol class="board" id="board"></ol>
+    <button class="btn gold" id="copyBtn">Copy for WhatsApp</button>
+    <button class="btn ghost" id="closeBoardBtn">Back to the field</button>
+    <div class="copied" id="copied"></div>
+  </div>
+</div>
+
+<button id="admin">reset</button>
+
+<script>
+(function(){
+  // ============================================================
+  // CONFIG: paste your Supabase project values here
+  // ============================================================
+  const SUPABASE_URL  = 'https://iiincqwdyekxndjzjmgm.supabase.co';
+  const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlpaW5jcXdkeWVreG5kanpqbWdtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg2MjI3OTIsImV4cCI6MjEwNDE5ODc5Mn0.JMOMYZl3Hn_LqOZXJmFNfT6ltQte9f0cXF7CzINfXg8';
+  const RESET_KEY     = 'CHANGE_ME_RESET_KEY';   // must match setup.sql
+  const LEAGUE_NAME   = 'Family Fantasy Football 2026';
+
+  const PLAYERS = ['Rafa','Danalie','Denise','Nate','Aly','Mickey','Katri','Brian','James','Andre'];
+  const COLORS  = ['#c1272d','#1f4a8c','#e3b23c','#1c7a4a','#7b3fa0','#d9622b','#2ba7a1','#8c1c3f','#4a5568','#5b8c3a'];
+  const colorOf = name => COLORS[Math.max(0, PLAYERS.indexOf(name)) % COLORS.length];
+
+  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+
+  // ---------- state ----------
+  let me = localStorage.getItem('dd_player') || null;
+  let holes = [];              // [{hole, claimed_by, pick, claimed_at}]
+  let onlineNames = new Set();
+  let myClaim = null;          // {hole, pick} once I've hit
+
+  const $ = id => document.getElementById(id);
+  const joinScreen = $('join'), gameScreen = $('game');
+
+  // ---------- data ----------
+  async function loadHoles(){
+    const { data, error } = await sb.from('draft_holes').select('*').order('hole');
+    if(error){ $('joinStatus').textContent = 'Could not reach the field. Check the Supabase config.'; console.error(error); return; }
+    holes = data;
+    onHolesChanged();
+  }
+
+  function remainingPicks(){
+    const taken = new Set(holes.filter(h => h.pick).map(h => h.pick));
+    return [1,2,3,4,5,6,7,8,9,10].filter(p => !taken.has(p));
+  }
+  function openHoles(){ return holes.filter(h => !h.claimed_by); }
+
+  function onHolesChanged(){
+    // join screen: mark who's done
+    document.querySelectorAll('.name-btn').forEach(b => {
+      const h = holes.find(x => x.claimed_by === b.dataset.name);
+      b.classList.toggle('done', !!h);
+      if(h) b.dataset.pick = h.pick;
+    });
+    // my claim?
+    if(me){
+      const mine = holes.find(h => h.claimed_by === me);
+      myClaim = mine ? { hole: mine.hole, pick: mine.pick } : null;
+    }
+    $('holesLeft').textContent = openHoles().length + (openHoles().length === 1 ? ' hole open' : ' holes open');
+    if(holes.length && openHoles().length === 0 && gameScreen.classList.contains('active')){
+      setTimeout(() => showBoard(true), 600);
+    }
+  }
+
+  // ---------- realtime ----------
+  function subscribe(){
+    sb.channel('draft_holes_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'draft_holes' }, payload => {
+        const row = payload.new;
+        if(!row) return;
+        const wasClaimed = (holes.find(h => h.hole === row.hole) || {}).claimed_by;
+        holes = holes.map(h => h.hole === row.hole ? row : h);
+        if(!holes.find(h => h.hole === row.hole)) holes.push(row);
+        onHolesChanged();
+        if(row.claimed_by && !wasClaimed && row.claimed_by !== me){
+          toast(`${row.claimed_by} hit hole ${row.hole} → pick #${row.pick}!`);
+        }
+        if(!row.claimed_by && wasClaimed){ // reset happened
+          myClaim = null; hideOverlays(); toast('Board reset. Throw again!');
+        }
+      })
+      .subscribe();
+  }
+
+  let presence = null;
+  function joinPresence(){
+    presence = sb.channel('draft_presence', { config: { presence: { key: me } } });
+    presence.on('presence', { event: 'sync' }, () => {
+      const state = presence.presenceState();
+      onlineNames = new Set(Object.keys(state));
+      renderOnline();
+    }).subscribe(async status => {
+      if(status === 'SUBSCRIBED') await presence.track({ name: me, at: Date.now() });
+    });
+  }
+  function renderOnline(){
+    const el = $('online'); el.innerHTML = '';
+    Array.from(onlineNames).sort().forEach(n => {
+      const s = document.createElement('span'); s.textContent = n; el.appendChild(s);
+    });
+  }
+
+  // ---------- join screen ----------
+  function buildNames(){
+    const wrap = $('names'); wrap.innerHTML = '';
+    PLAYERS.forEach(n => {
+      const b = document.createElement('button');
+      b.className = 'name-btn'; b.dataset.name = n;
+      b.innerHTML = `<span class="dot" style="background:${colorOf(n)}"></span>${n}`;
+      b.addEventListener('click', () => enterGame(n));
+      wrap.appendChild(b);
+    });
+  }
+
+  function enterGame(name){
+    me = name; localStorage.setItem('dd_player', name);
+    $('meName').textContent = name; $('meDot').style.background = colorOf(name);
+    joinScreen.classList.remove('active'); gameScreen.classList.add('active');
+    onHolesChanged();
+    joinPresence();
+    resizeCanvas();
+    if(myClaim){ showWin(myClaim.pick, true); }
+  }
+
+  // ---------- toast ----------
+  let toastTimer = null;
+  function toast(msg){
+    const t = $('toast'); t.textContent = msg; t.classList.add('show');
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 3200);
+  }
+
+  // ============================================================
+  // GAME CANVAS
+  // ============================================================
+  const canvas = $('c'); const ctx = canvas.getContext('2d');
+  let W = 0, H = 0, DPR = 1;
+  let holeGeom = [];   // [{hole, x, y, r}]
+  const ball = { x:0, y:0, r:16, home:{x:0,y:0} };
+  let drag = null;     // {x,y} current pointer while dragging
+  let flight = null;   // {t0, dur, from, to}
+  let busy = false;    // awaiting server
+  let missMsg = null;  // {text, until}
+  let shuffleTick = 0;
+  let holeLabels = {}; // hole -> displayed number
+
+  function resizeCanvas(){
+    const rect = canvas.getBoundingClientRect();
+    DPR = Math.min(2, window.devicePixelRatio || 1);
+    W = rect.width; H = rect.height;
+    canvas.width = W * DPR; canvas.height = H * DPR;
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    // hole grid: 2 rows x 5
+    holeGeom = [];
+    const r = Math.min(W/13, 26);
+    for(let i=0;i<10;i++){
+      const row = Math.floor(i/5), col = i%5;
+      const x = W*(0.12 + col*0.19);
+      const y = H*(0.20 + row*0.16);
+      holeGeom.push({ hole: i+1, x, y, r });
+    }
+    ball.home = { x: W/2, y: H*0.80 };
+    if(!flight){ ball.x = ball.home.x; ball.y = ball.home.y; }
+  }
+  window.addEventListener('resize', resizeCanvas);
+
+  // ---------- input ----------
+  function ptr(e){ const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
+  canvas.addEventListener('pointerdown', e => {
+    if(busy || flight || myClaim) return;
+    const p = ptr(e);
+    if(Math.hypot(p.x - ball.x, p.y - ball.y) < ball.r * 3){ drag = p; canvas.setPointerCapture(e.pointerId); }
+  });
+  canvas.addEventListener('pointermove', e => { if(drag) drag = ptr(e); });
+  canvas.addEventListener('pointerup', e => {
+    if(!drag) return;
+    const p = ptr(e); drag = null;
+    const dx = ball.home.x - p.x, dy = ball.home.y - p.y;   // pull back → throw forward
+    const dist = Math.hypot(dx, dy);
+    if(dist < 18) return; // tiny pull, ignore
+    const power = Math.min(dist, 220) / 220;
+    // landing target: direction of pull, scaled to reach the wall region
+    const reach = H * 0.72 * power + 40;
+    const nx = dx / dist, ny = dy / dist;
+    const to = { x: ball.home.x + nx * reach, y: ball.home.y + ny * reach };
+    to.x = Math.max(8, Math.min(W-8, to.x)); to.y = Math.max(8, Math.min(H-8, to.y));
+    flight = { t0: performance.now(), dur: 620, from: {...ball.home}, to };
+    try{ navigator.vibrate && navigator.vibrate(8); }catch(e){}
+  });
+  canvas.addEventListener('pointercancel', () => { drag = null; });
+
+  // ---------- resolve throw ----------
+  async function resolveLanding(pt){
+    const hit = holeGeom.find(g => {
+      const h = holes.find(x => x.hole === g.hole);
+      return h && !h.claimed_by && Math.hypot(pt.x - g.x, pt.y - g.y) <= g.r * 0.92;
+    });
+    if(!hit){
+      missMsg = { text: pt.y < H*0.5 ? 'Off the wall!' : 'Short!', until: performance.now() + 700 };
+      setTimeout(() => { ball.x = ball.home.x; ball.y = ball.home.y; }, 350);
+      return;
+    }
+    busy = true; $('hint').textContent = 'Through the hole… checking the tape…';
+    const { data, error } = await sb.rpc('claim_hole', { p_hole: hit.hole, p_player: me });
+    busy = false; $('hint').textContent = 'Pull the football back and release to throw';
+    ball.x = ball.home.x; ball.y = ball.home.y;
+    if(error){ toast('Connection hiccup, throw again.'); console.error(error); return; }
+    if(data && data.ok){
+      myClaim = { hole: hit.hole, pick: data.pick };
+      await loadHoles();
+      showWin(data.pick, false);
+    }else if(data && data.reason === 'hole_taken'){
+      toast('Too slow! That hole just closed. Keep throwing.');
+      await loadHoles();
+    }else if(data && data.reason === 'already_claimed'){
+      await loadHoles(); if(myClaim) showWin(myClaim.pick, true);
+    }else{
+      toast('Something odd happened, try again.');
+    }
+  }
+
+  // ---------- draw ----------
+  function draw(now){
+    ctx.clearRect(0,0,W,H);
+
+    // turf
+    const g = ctx.createLinearGradient(0,0,0,H);
+    g.addColorStop(0,'#182a3d'); g.addColorStop(0.5,'#123821'); g.addColorStop(1,'#0f2e1b');
+    ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
+    ctx.strokeStyle = 'rgba(243,241,231,0.10)'; ctx.lineWidth = 1;
+    for(let y=H*0.52;y<H;y+=H*0.08){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+
+    // wall
+    const wallTop = H*0.10, wallBot = H*0.46;
+    ctx.fillStyle = '#1b2a3a'; ctx.fillRect(W*0.03, wallTop, W*0.94, wallBot-wallTop);
+    ctx.strokeStyle = '#e3b23c'; ctx.lineWidth = 3; ctx.strokeRect(W*0.03, wallTop, W*0.94, wallBot-wallTop);
+    ctx.font = "700 10px Inter"; ctx.fillStyle = 'rgba(243,241,231,0.45)'; ctx.textAlign='center';
+    ctx.fillText('PRECISION WALL', W/2, wallTop + 14);
+
+    // shuffle labels every ~110ms
+    if(now - shuffleTick > 110){
+      shuffleTick = now;
+      const rem = remainingPicks();
+      holeGeom.forEach(gm => {
+        const h = holes.find(x => x.hole === gm.hole);
+        if(h && !h.claimed_by){
+          holeLabels[gm.hole] = rem.length ? rem[Math.floor(Math.random()*rem.length)] : '—';
+        }
+      });
+    }
+
+    // holes
+    holeGeom.forEach(gm => {
+      const h = holes.find(x => x.hole === gm.hole);
+      const closed = !!(h && h.claimed_by);
+      ctx.beginPath(); ctx.arc(gm.x, gm.y, gm.r, 0, Math.PI*2);
+      if(closed){
+        ctx.fillStyle = colorOf(h.claimed_by); ctx.fill();
+        ctx.lineWidth = 3; ctx.strokeStyle = '#e3b23c'; ctx.stroke();
+        ctx.fillStyle = '#fff'; ctx.font = "800 11px Inter"; ctx.textAlign='center';
+        ctx.fillText(h.claimed_by, gm.x, gm.y - 3);
+        ctx.font = "900 13px Anton"; ctx.fillText('#'+h.pick, gm.x, gm.y + 12);
+      }else{
+        ctx.fillStyle = '#05090f'; ctx.fill();
+        ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(243,241,231,0.55)'; ctx.stroke();
+        ctx.fillStyle = '#e3b23c'; ctx.font = `900 ${Math.round(gm.r*0.9)}px Anton`; ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.fillText(String(holeLabels[gm.hole] ?? '?'), gm.x, gm.y+1);
+        ctx.textBaseline='alphabetic';
+      }
+    });
+
+    // aim line
+    if(drag){
+      const dx = ball.home.x - drag.x, dy = ball.home.y - drag.y;
+      const dist = Math.hypot(dx,dy); const power = Math.min(dist,220)/220;
+      const reach = H*0.72*power + 40;
+      const tx = ball.home.x + (dx/dist)*reach, ty = ball.home.y + (dy/dist)*reach;
+      ctx.setLineDash([6,6]); ctx.strokeStyle = 'rgba(227,178,60,0.7)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(ball.home.x, ball.home.y); ctx.lineTo(tx, ty); ctx.stroke(); ctx.setLineDash([]);
+      ctx.beginPath(); ctx.arc(tx, ty, 8, 0, Math.PI*2); ctx.strokeStyle='#e3b23c'; ctx.stroke();
+      // rubber band from ball to finger
+      ctx.strokeStyle='rgba(243,241,231,0.35)'; ctx.beginPath(); ctx.moveTo(ball.home.x, ball.home.y); ctx.lineTo(drag.x, drag.y); ctx.stroke();
+    }
+
+    // flight
+    let scale = 1;
+    if(flight){
+      const t = Math.min(1, (now - flight.t0)/flight.dur);
+      const ease = t;
+      ball.x = flight.from.x + (flight.to.x - flight.from.x)*ease;
+      ball.y = flight.from.y + (flight.to.y - flight.from.y)*ease - Math.sin(Math.PI*t)*H*0.10;
+      scale = 1 - 0.55*t;
+      if(t >= 1){ const to = flight.to; flight = null; resolveLanding(to); }
+    }else if(drag){
+      ball.x = drag.x; ball.y = drag.y;
+    }
+
+    drawBall(ball.x, ball.y, ball.r*scale);
+
+    if(missMsg && now < missMsg.until){
+      ctx.fillStyle='#d1483f'; ctx.font="900 22px Anton"; ctx.textAlign='center';
+      ctx.fillText(missMsg.text, W/2, H*0.60);
+    }
+    requestAnimationFrame(draw);
+  }
+
+  function drawBall(x,y,r){
+    ctx.save(); ctx.translate(x,y);
+    ctx.beginPath(); ctx.ellipse(0,0,r*1.35,r*0.85,-0.5,0,Math.PI*2);
+    ctx.fillStyle='#8b4a1e'; ctx.fill(); ctx.strokeStyle='#5a2e10'; ctx.lineWidth=2; ctx.stroke();
+    ctx.strokeStyle='#f3f1e7'; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.moveTo(-r*0.45,-r*0.45); ctx.lineTo(r*0.45,r*0.45); ctx.stroke();
+    for(let i=-2;i<=2;i++){ const p=i*r*0.18; ctx.beginPath(); ctx.moveTo(p-r*0.15,p+r*0.15); ctx.lineTo(p+r*0.15,p-r*0.15); ctx.stroke(); }
+    ctx.restore();
+  }
+
+  // ---------- overlays ----------
+  function showWin(pick, quiet){
+    $('winPick').textContent = '#' + pick;
+    $('winOverlay').classList.add('show');
+    $('hint').textContent = "You're locked in.";
+    if(!quiet) confetti(70);
+    try{ navigator.vibrate && navigator.vibrate([30,40,30]); }catch(e){}
+  }
+  function hideOverlays(){ $('winOverlay').classList.remove('show'); $('boardOverlay').classList.remove('show'); }
+  $('winBoardBtn').addEventListener('click', () => { $('winOverlay').classList.remove('show'); showBoard(false); });
+  $('closeBoardBtn').addEventListener('click', () => $('boardOverlay').classList.remove('show'));
+
+  function showBoard(final){
+    const list = $('board'); list.innerHTML = '';
+    const byPick = {}; holes.forEach(h => { if(h.pick) byPick[h.pick] = h.claimed_by; });
+    for(let p=1;p<=10;p++){
+      const li = document.createElement('li');
+      const who = byPick[p];
+      li.innerHTML = `<div class="n">${p}</div><div class="dot" style="background:${who?colorOf(who):'rgba(255,255,255,0.12)'}"></div><div class="who ${who?'':'pending'}">${who || 'still open'}</div>`;
+      list.appendChild(li);
+    }
+    $('boardTitle').textContent = final ? 'FINAL DRAFT ORDER' : 'THE DRAFT BOARD';
+    $('boardSub').textContent = final ? 'All 10 holes are closed. It is official.' : `${openHoles().length} holes still open`;
+    $('boardOverlay').classList.add('show');
+    if(final) confetti(90);
+  }
+
+  $('copyBtn').addEventListener('click', () => {
+    const byPick = {}; holes.forEach(h => { if(h.pick) byPick[h.pick] = h.claimed_by; });
+    let txt = `🏈 DRAFT ORDER — ${LEAGUE_NAME} 🏈\n\n`;
+    for(let p=1;p<=10;p++) txt += `${p}. ${byPick[p] || '(open)'}\n`;
+    txt += `\nDecided on the Precision Wall 🏁`;
+    navigator.clipboard.writeText(txt).then(() => { $('copied').textContent = 'Copied. Paste it in the chat.'; setTimeout(()=>$('copied').textContent='',2500); })
+      .catch(() => { $('copied').textContent = 'Copy failed, screenshot instead.'; });
+  });
+
+  function confetti(n){
+    for(let i=0;i<n;i++){
+      const p = document.createElement('div'); p.className='confetti';
+      p.style.left = Math.random()*window.innerWidth + 'px';
+      p.style.background = COLORS[Math.floor(Math.random()*COLORS.length)];
+      const d = 2.2 + Math.random()*1.6; p.style.animationDuration = d+'s';
+      document.body.appendChild(p); setTimeout(()=>p.remove(), d*1000+100);
+    }
+  }
+
+  // ---------- commissioner reset (open with ?admin=1) ----------
+  if(new URLSearchParams(location.search).get('admin') === '1'){
+    const a = $('admin'); a.style.display = 'block';
+    a.addEventListener('click', async () => {
+      if(!confirm('Reset the whole board? Everyone throws again.')) return;
+      const { data } = await sb.rpc('reset_draft', { p_key: RESET_KEY });
+      toast(data ? 'Board reset.' : 'Reset key rejected.');
+      await loadHoles();
+    });
+  }
+
+  // ---------- boot ----------
+  buildNames();
+  loadHoles().then(() => {
+    $('joinStatus').textContent = 'Tap your name to take the field.';
+    subscribe();
+    if(me && PLAYERS.includes(me)) enterGame(me);
+  });
+  requestAnimationFrame(draw);
+})();
+</script>
+</body>
+</html>
