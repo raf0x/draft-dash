@@ -201,7 +201,10 @@
     PLAYERS.forEach(n => {
       const b = document.createElement('button'); b.className='name-btn'; b.dataset.name=n;
       b.innerHTML = `<span class="dot" style="background:${colorOf(n)}"></span>${n}`;
-      b.addEventListener('click', () => enterGame(n)); wrap.appendChild(b);
+      b.addEventListener('click', () => {
+        if(!confirm(`Are you sure you're clicking on your name, ${n}?\n\nIf not, Rafa will charge you $2 to reset the game.`)) return;
+        enterGame(n);
+      }); wrap.appendChild(b);
     });
   }
   function enterGame(name){
