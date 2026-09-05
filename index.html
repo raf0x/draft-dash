@@ -229,7 +229,7 @@
 
   function buildLayout(){
     const rng = mulberry32(LAYOUT_SEED);
-    const r = Math.min(W/16, 21);
+    const r = Math.min(W/14, 24);
     const xmin = W*0.10, xmax = W*0.90, ymin = H*0.13, ymax = H*0.50;
     const pts = [];
     let guard = 0;
@@ -260,7 +260,7 @@
   window.addEventListener('resize', resizeCanvas);
 
   function newWind(){ wind = (Math.random()*2-1); if(Math.abs(wind) < 0.12) wind = 0; }
-  const windPx = () => wind * W * 0.22;   // total lateral drift over a full-length throw
+  const windPx = () => wind * W * 0.15;   // total lateral drift over a full-length throw
 
   // ---------- input ----------
   const ptr = e => { const r = canvas.getBoundingClientRect(); return { x:e.clientX-r.left, y:e.clientY-r.top }; };
@@ -291,7 +291,7 @@
     const tSec = Date.now()/1000;
     const hit = holeGeom.find(g => {
       const h = holes.find(x => x.hole === g.hole); if(!h || h.claimed_by) return false;
-      const hp = holePos(g, tSec); return Math.hypot(pt.x-hp.x, pt.y-hp.y) <= g.r*0.85;
+      const hp = holePos(g, tSec); return Math.hypot(pt.x-hp.x, pt.y-hp.y) <= g.r*1.05;
     });
     if(!hit){
       missMsg = { text: pt.y < H*0.55 ? (Math.abs(pt.x - W/2) > W*0.42 ? 'Wide!' : 'Off the wall!') : 'Short!', until: performance.now()+750 };
